@@ -51,14 +51,21 @@ class Grid:
 
 
 # ---------------------------------------------------------------- 핵심 연산
+# 표준 라벨로 바꿀 수 있는 표기 목록 (소문자 기준). 새 표기를 지원하려면 여기에 한 줄만 추가한다.
+LABEL_ALIASES = {
+    "+": "Cross",
+    "cross": "Cross",
+    "x": "X",
+}
+
+
 def normalize_label(raw) -> Optional[str]:
-    """라벨을 표준 라벨(Cross, X)로 통일한다. '+', 'cross' -> Cross / 'x' -> X. 모르면 None."""
-    key = str(raw).strip().lower()
-    if key in ("+", "cross"):
-        return "Cross"
-    if key == "x":
-        return "X"
-    return None
+    """라벨을 표준 라벨(Cross, X)로 통일한다. 앞뒤 공백과 대소문자는 무시한다. 모르면 None.
+
+    라벨 규칙을 이 함수 한 곳에 모아 두었기 때문에 필터 키, expected, 출력 비교가
+    모두 같은 기준을 쓰고, 새 표기를 추가해도 고칠 곳이 LABEL_ALIASES 하나뿐이다.
+    """
+    return LABEL_ALIASES.get(str(raw).strip().lower())
 
 
 def mac(pattern: Grid, filt: Grid) -> float:
@@ -266,6 +273,23 @@ def analyze_case(name: str, case, filters, bad_filters) -> Tuple[str, str]:
     return "FAIL", reason
 
 
+def failure_type(reason: str) -> str:
+    """실패 사유 문장에서 유형(라벨 오류, 크기 불일치, 동점 등)을 뽑는다."""
+    for kind in ("라벨 오류", "크기 불일치", "동점", "스키마 오류", "필터 오류", "판정 불일치"):
+        if reason.startswith(kind):
+            return "동점(UNDECIDED)" if kind == "동점" else kind
+    return "기타"
+
+
+def count_failure_types(failures) -> Dict[str, int]:
+    """[(케이스, 사유), ...]를 유형별 개수로 센다. (등장 순서 유지)"""
+    counts: Dict[str, int] = {}
+    for _name, reason in failures:
+        kind = failure_type(reason)
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
 def mode_json() -> None:
     try:
         with open(DATA_FILE, encoding="utf-8") as f:
@@ -301,6 +325,9 @@ def mode_json() -> None:
     print("실패: %d개" % (total - passed))
     failures = [(name, reason) for name, status, reason in results if status == "FAIL"]
     if failures:
+        print("\n실패 유형별 개수:")
+        for kind, count in count_failure_types(failures).items():
+            print("- %s: %d건" % (kind, count))
         print("\n실패 케이스:")
         for name, reason in failures:
             print("- %s: %s" % (name, reason))
