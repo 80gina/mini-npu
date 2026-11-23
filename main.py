@@ -190,6 +190,120 @@ def mode_user_input() -> None:
     print_perf_table([3])
 
 
+# ---------------------------------------------------------------- 모드 2: data.json 분석
+def load_filters(raw_filters) -> Tuple[Dict[int, Dict[str, Grid]], Dict[int, str]]:
+    """filters(size_N)를 읽어 라벨을 표준화한다. (사용 가능한 필터, 읽기 실패 사유)"""
+    good: Dict[int, Dict[str, Grid]] = {}
+    bad: Dict[int, str] = {}
+    for key, value in raw_filters.items():
+        m = re.match(r"^size_(\d+)$", str(key))
+        if not m:
+            continue
+        n = int(m.group(1))
+        try:
+            labeled = {}
+            for label_key, rows in value.items():
+                label = normalize_label(label_key)
+                if label is None:
+                    raise ValueError("알 수 없는 필터 키: %r" % (label_key,))
+                grid = Grid.from_rows(rows)
+                if grid.n != n:
+                    raise ValueError("필터 크기 %d가 %s와 다름" % (grid.n, key))
+                labeled[label] = grid
+            if "Cross" not in labeled or "X" not in labeled:
+                raise ValueError("Cross, X 필터가 모두 필요함")
+            good[n] = labeled
+            print("✓ %s 필터 로드 완료 (Cross, X)" % key)
+        except (ValueError, AttributeError) as e:
+            bad[n] = "필터 오류: %s" % e
+            print("✗ %s 필터 로드 실패 (%s)" % (key, e))
+    return good, bad
+
+
+def sort_key(name: str):
+    m = re.match(r"^size_(\d+)_(.+)$", name)
+    if not m:
+        return (10 ** 9, name)
+    idx = m.group(2)
+    return (int(m.group(1)), (0, int(idx), "") if idx.isdigit() else (1, 0, idx))
+
+
+def analyze_case(name: str, case, filters, bad_filters) -> Tuple[str, str]:
+    """패턴 한 건을 판정한다. (PASS 또는 FAIL, 사유). 어떤 오류도 이 함수 밖으로 새지 않는다."""
+    try:
+        m = re.match(r"^size_(\d+)_(.+)$", name)
+        if not m:
+            return "FAIL", "스키마 오류: 키가 size_{N}_{idx} 형식이 아님"
+        n = int(m.group(1))
+        if n in bad_filters:
+            return "FAIL", bad_filters[n]
+        if n not in filters:
+            return "FAIL", "스키마 오류: size_%d 필터가 data.json에 없음" % n
+        if not isinstance(case, dict) or "input" not in case or "expected" not in case:
+            return "FAIL", "스키마 오류: input 또는 expected가 없음"
+        expected = normalize_label(case["expected"])
+        if expected is None:
+            return "FAIL", "라벨 오류: expected %r는 Cross(+)나 X(x)가 아님" % (case["expected"],)
+        pattern = Grid.from_rows(case["input"])
+        if pattern.n != n:
+            return "FAIL", "크기 불일치: 패턴 %dx%d, 필터 %dx%d" % (pattern.n, pattern.n, n, n)
+    except ValueError as e:
+        return "FAIL", "스키마 오류: %s" % e
+
+    cross_score = mac(pattern, filters[n]["Cross"])
+    x_score = mac(pattern, filters[n]["X"])
+    verdict = judge_cross_x(cross_score, x_score)
+    print("Cross 점수: %r" % cross_score)
+    print("X 점수: %r" % x_score)
+    if verdict == expected:
+        print("판정: %s | expected: %s | PASS" % (verdict, expected))
+        return "PASS", ""
+    if verdict == "UNDECIDED":
+        reason = "동점(UNDECIDED): |Cross-X| = %.3g < %g, 동점 규칙에 따라 FAIL" % (abs(cross_score - x_score), EPSILON)
+    else:
+        reason = "판정 불일치: 판정 %s, expected %s" % (verdict, expected)
+    print("판정: %s | expected: %s | FAIL (%s)" % (verdict, expected, reason.split(":")[0]))
+    return "FAIL", reason
+
+
+def mode_json() -> None:
+    try:
+        with open(DATA_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        raw_filters = data["filters"]
+        raw_patterns = data["patterns"]
+        if not isinstance(raw_filters, dict) or not isinstance(raw_patterns, dict):
+            raise TypeError("filters/patterns 형식이 객체가 아님")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        print("data.json을 읽을 수 없습니다: %s" % e)
+        return
+
+    section("[1] 필터 로드")
+    filters, bad_filters = load_filters(raw_filters)
+
+    section("[2] 패턴 분석 (라벨 정규화 적용)")
+    results = []
+    for name in sorted(raw_patterns, key=sort_key):
+        print("--- %s ---" % name)
+        status, reason = analyze_case(name, raw_patterns[name], filters, bad_filters)
+        if status == "FAIL" and not reason.startswith(("동점", "판정 불일치")):
+            print("FAIL (%s)" % reason)
+        results.append((name, status, reason))
+
+    section("[3] 결과 요약")
+    total = len(results)
+    passed = sum(1 for _, status, _ in results if status == "PASS")
+    print("총 테스트: %d개" % total)
+    print("통과: %d개" % passed)
+    print("실패: %d개" % (total - passed))
+    failures = [(name, reason) for name, status, reason in results if status == "FAIL"]
+    if failures:
+        print("\n실패 케이스:")
+        for name, reason in failures:
+            print("- %s: %s" % (name, reason))
+        print("\n(상세 원인 분석 및 복잡도 설명은 README.md의 \"결과 리포트\" 섹션 참고)")
+
+
 # ---------------------------------------------------------------- 실행
 def main() -> None:
     print("=== Mini NPU Simulator ===\n")
@@ -209,7 +323,7 @@ def main() -> None:
     if choice == "1":
         mode_user_input()
     else:
-        print("아직 준비 중인 모드입니다.")
+        mode_json()
 
 
 if __name__ == "__main__":
