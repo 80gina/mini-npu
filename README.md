@@ -503,3 +503,51 @@ MAC 점수는 필터의 크기·1의 개수에 따라 최대값이 달라서 크
 계산 예시(가정한 값): NPU가 초당 **1조 번(1 TMAC/s)** 곱셈·덧셈을 하는데 MAC 하나마다 8비트(1바이트) 값 **2개**(입력, 필터)를 읽어야 한다면 초당 **2 TB**가 필요합니다. 그런데 일반적인 메모리가 초당 **50 GB** 정도를 보낸다면 **약 40배 부족**해서 연산 유닛이 데이터를 기다리며 놉니다. 그래서 NPU는 한 번 가져온 필터를 칩 안 버퍼에서 **재사용**합니다.
 **이 프로그램의 증거:** 같은 N²번의 곱셈인데 값을 꺼내는 방식만 바꿔 `get()` 호출을 없앤 `mac_flat`이 약 2~3배 빨랐다는 것(5-2, 5-3)은, **연산 자체보다 데이터에 접근하는 비용이 시간을 좌우한다**는 작은 증거입니다.
 
+## 10. 🐳 Docker로 실행하기 (1번 미션 연결)
+1번 미션에서 배운 Docker로 이 시뮬레이터를 이미지로 만들었습니다. 이미지는 **`mini-npu:1.0`** 이고 Docker Desktop의 **Images** 탭에 나타납니다.
+
+| 파일 | 역할 |
+|---|---|
+| `Dockerfile` | `python:3.12-slim`에 `main.py`, `data.json`, `test_mini_npu.py`를 담음 (외부 라이브러리 없음) |
+| `.dockerignore` | `.git`, `docs/` 등을 이미지에서 제외 |
+
+```powershell
+docker build -t mini-npu:1.0 .
+docker run --rm -it mini-npu:1.0
+docker run --rm mini-npu:1.0 python test_mini_npu.py
+```
+| 명령 | 뜻 |
+|---|---|
+| `docker build -t mini-npu:1.0 .` | 이미지를 만듭니다 (약 203 MB) |
+| `docker run --rm -it mini-npu:1.0` | 시뮬레이터 실행. 모드 1은 키보드 입력이 필요해서 `-it` 사용 |
+| `docker run --rm mini-npu:1.0 python test_mini_npu.py` | 이미지 안에서 자동 테스트 28개 실행 |
+
+📊 확인한 결과: 컨테이너 안에서 테스트 28개가 모두 `OK`였고, 모드 2는 `요약: total=9 pass=6 fail=3 ...`로 컴퓨터에서 직접 실행한 결과와 **같았습니다.** 측정 환경 줄만 `Python 3.12.16, Linux aarch64`로 바뀌므로, **같은 코드를 다른 환경에서 실행하면 시간 값이 달라질 수 있다**는 것을 보여 줍니다. (실행 환경이 컨테이너 안의 리눅스이기 때문)
+
+### 실행 증빙
+**📊 Docker Desktop의 Images 탭** — 이 프로젝트의 이미지(`quiz-game:1.0`, `mini-npu:1.0`, 각 약 202 MB)가 목록에 나타납니다. 이 화면은 Docker Desktop을 직접 캡처한 것입니다.
+
+![Docker Desktop Images 탭](docs/screenshots/D1_docker_images.png)
+
+**📊 터미널 실행 기록** — 아래는 실제로 명령을 실행해 나온 출력입니다. (시간 값은 컴퓨터마다 다름)
+
+```text
+$ docker images        (이 프로젝트 이미지만)
+REPOSITORY    TAG       SIZE
+mini-npu      1.0       203MB
+quiz-game     1.0       203MB
+
+$ docker run --rm mini-npu:1.0 python test_mini_npu.py
+----------------------------------------------------------------------
+Ran 28 tests in 0.006s
+
+OK
+
+$ docker run --rm -i mini-npu:1.0        (모드 2 선택 후 일부 줄)
+측정 환경: Python 3.12.16, Linux aarch64, 반복 10회(워밍업 1회 제외)
+총 테스트: 9개
+통과: 6개
+실패: 3개
+요약: total=9 pass=6 fail=3 fail_label=1 fail_size=1 fail_tie=1 fail_schema=0 fail_logic=0 failed_filters=0
+```
+컴퓨터에서 직접 실행한 결과와 총 9, 통과 6, 실패 3이 **같습니다.** 달라지는 것은 `측정 환경` 줄(컨테이너 안의 `Linux aarch64`)과 시간 값뿐입니다.
