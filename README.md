@@ -278,6 +278,10 @@ mini-npu/
 
 실행: `python test_mini_npu.py` → `Ran 16 tests ... OK`
 
+📊 실행 화면 (16개 모두 `ok`, 마지막에 `Ran 16 tests` / `OK`):
+
+![테스트 실행 결과](docs/screenshots/T1_unittest_ok.png)
+
 ### 8-3. 새 라벨을 추가하는 절차 (체크리스트) 📝 🧪
 지원하는 표기는 현재 `+`, `cross`, `Cross`(대소문자 무시)가 **Cross**, `x`, `X`가 **X**입니다. `PLUS`, `✚` 같은 변형은 **지원하지 않으며**, 필요하면 아래 순서로 추가합니다.
 
