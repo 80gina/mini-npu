@@ -30,6 +30,71 @@ class LabelTests(unittest.TestCase):
         self.assertIsNone(main.normalize_label("plus"))
 
 
+class EpsilonBoundaryTests(unittest.TestCase):
+    """EPSILON 경계: 차이가 정확히 1e-9이면 동점이 아니고(< 비교), 그보다 작으면 동점이다."""
+
+    def test_just_below_is_tie(self):
+        self.assertTrue(main.is_tie(1.0, 1.0 + 0.99e-9))
+
+    def test_exactly_epsilon_is_not_tie(self):
+        self.assertFalse(main.is_tie(0.0, main.EPSILON))
+
+    def test_just_above_is_not_tie(self):
+        self.assertFalse(main.is_tie(1.0, 1.0 + 1.01e-9))
+
+    def test_symmetric(self):
+        self.assertEqual(main.is_tie(0.5, 0.5 + 1e-12), main.is_tie(0.5 + 1e-12, 0.5))
+
+
+class AliasSafetyTests(unittest.TestCase):
+    """새 alias를 추가했을 때 규칙이 깨지지 않았는지 자동으로 확인한다."""
+
+    def test_aliases_map_only_to_standard_labels(self):
+        self.assertTrue(set(main.LABEL_ALIASES.values()) <= {"Cross", "X"})
+
+    def test_alias_keys_are_lowercase_and_trimmed(self):
+        for key in main.LABEL_ALIASES:
+            self.assertEqual(key, key.strip().lower())
+
+    def test_every_alias_round_trips(self):
+        for key, label in main.LABEL_ALIASES.items():
+            self.assertEqual(main.normalize_label(key), label)
+            self.assertEqual(main.normalize_label(key.upper()), label)
+
+
+class ReportFormatTests(unittest.TestCase):
+    def test_tie_failure_has_fixed_prefix(self):
+        """동점 FAIL 사유는 항상 '동점(UNDECIDED):'로 시작한다."""
+        tie_filters = {3: {"Cross": main.Grid.from_rows([[0.1, 0.2, 0.3], [0, 0, 0], [0, 0, 0]]),
+                           "X": main.Grid.from_rows([[0.3, 0.2, 0.1], [0, 0, 0], [0, 0, 0]])}}
+        case = {"input": [[1, 1, 1], [0, 0, 0], [0, 0, 0]], "expected": "X"}
+        out = io.StringIO()
+        with redirect_stdout(out):
+            status, reason = main.analyze_case("size_3_1", case, tie_filters, {})
+        self.assertEqual(status, "FAIL")
+        self.assertTrue(reason.startswith("동점(UNDECIDED):"), reason)
+
+    def test_summary_line_uses_standard_keys(self):
+        failures = [("a", "라벨 오류: x"), ("b", "크기 불일치: y"), ("c", "동점(UNDECIDED): z")]
+        line = main.summary_line(9, 6, failures, {13: "필터 오류: ..."})
+        for token in ("total=9", "pass=6", "fail=3", "fail_label=1", "fail_size=1", "fail_tie=1",
+                      "fail_schema=0", "fail_logic=0", "failed_filters=1"):
+            self.assertIn(token, line)
+
+    def test_missing_filter_is_fail(self):
+        status, reason = main.analyze_case("size_7_1", {"input": [[1]], "expected": "+"}, {}, {})
+        self.assertEqual(status, "FAIL")
+        self.assertIn("필터가 data.json에 없음", reason)
+
+    def test_failed_filter_listed_in_summary(self):
+        self.assertIn("failed_filters=2", main.summary_line(0, 0, [], {5: "x", 13: "y"}))
+
+    def test_env_line_has_python_and_repeat(self):
+        line = main.env_line()
+        self.assertIn("Python", line)
+        self.assertIn("반복 %d회" % main.REPEAT, line)
+
+
 class MacTests(unittest.TestCase):
     def test_document_examples(self):
         cross, x = main.Grid.from_rows(CROSS), main.Grid.from_rows(X)
