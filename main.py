@@ -290,7 +290,10 @@ def mode_json() -> None:
             print("FAIL (%s)" % reason)
         results.append((name, status, reason))
 
-    section("[3] 결과 요약")
+    section("[3] 성능 분석 (평균/%d회)" % REPEAT)
+    print_perf_table([3, 5, 13, 25])
+
+    section("[4] 결과 요약")
     total = len(results)
     passed = sum(1 for _, status, _ in results if status == "PASS")
     print("총 테스트: %d개" % total)
