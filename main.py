@@ -307,26 +307,104 @@ def mode_json() -> None:
         print("\n(상세 원인 분석 및 복잡도 설명은 README.md의 \"결과 리포트\" 섹션 참고)")
 
 
+# ---------------------------------------------------------------- 보너스: 패턴 생성기 + 1차원 최적화
+def make_x(n: int) -> Grid:
+    """N x N X 패턴: 두 대각선을 1로 채운다."""
+    g = Grid(n)
+    for i in range(n):
+        g.set(i, i, 1)
+        g.set(i, n - 1 - i, 1)
+    return g
+
+
+def flatten(grid: Grid) -> List[float]:
+    """2차원 배열을 길이 N²의 1차원 리스트로 편다. (행 우선)"""
+    return [grid.cells[i][j] for i in range(grid.n) for j in range(grid.n)]
+
+
+def mac_flat(pattern: List[float], filt: List[float]) -> float:
+    """1차원 배열 버전 MAC. 칸마다 get() 호출 없이 인덱스 하나로 접근한다."""
+    if len(pattern) != len(filt):
+        raise ValueError("크기 불일치: 길이 %d, %d" % (len(pattern), len(filt)))
+    total = 0.0
+    for k in range(len(pattern)):
+        total += pattern[k] * filt[k]
+    return total
+
+
+def avg_ms(func, repeat: int = REPEAT) -> float:
+    times = []
+    for _ in range(repeat):
+        start = time.perf_counter()
+        func()
+        times.append((time.perf_counter() - start) * 1000)
+    return sum(times) / len(times)
+
+
+def print_compare_table(sizes) -> None:
+    """같은 입력, 같은 반복 횟수로 2차원 MAC과 1차원 MAC을 비교한다. (펴는 시간은 제외)"""
+    print("크기        2D 평균(ms)    1D 평균(ms)    속도 향상    점수 일치")
+    print("-" * 64)
+    for n in sizes:
+        cross, x = make_cross(n), make_x(n)
+        cf, xf = flatten(cross), flatten(x)
+        t2 = avg_ms(lambda: mac(cross, x))
+        t1 = avg_ms(lambda: mac_flat(cf, xf))
+        same = abs(mac(cross, x) - mac_flat(cf, xf)) < EPSILON
+        speed = ("%.2f배" % (t2 / t1)) if t1 > 0 else "-"
+        print("%-10s  %-13.3f  %-13.3f  %-10s  %s" % ("%dx%d" % (n, n), t2, t1, speed, "일치" if same else "불일치"))
+
+
+def mode_bonus() -> None:
+    try:
+        raw = input("패턴 크기 N 입력 (3~25): ").strip()
+        while not (raw.isdigit() and 3 <= int(raw) <= 25):
+            print("입력 형식 오류: 3 이상 25 이하의 정수를 입력하세요.")
+            raw = input("패턴 크기 N 입력 (3~25): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n입력이 중단되었습니다.")
+        return
+    n = int(raw)
+    cross, x = make_cross(n), make_x(n)
+    print()
+    section("[1] 생성된 패턴 (%dx%d)" % (n, n))
+    print("Cross:\n" + cross.show() + "\n")
+    print("X:\n" + x.show() + "\n")
+    section("[2] 생성 패턴 판정 (생성된 Cross/X를 필터로 사용)")
+    for label, pattern in (("Cross", cross), ("X", x)):
+        cs, xs = mac(pattern, cross), mac(pattern, x)
+        print("%s 패턴 -> Cross 점수: %s, X 점수: %s, 판정: %s" % (label, cs, xs, judge_cross_x(cs, xs)))
+    print()
+    section("[3] 성능 분석 (생성 패턴, 평균/%d회)" % REPEAT)
+    print_perf_table([3, 5, 13, 25, n] if n not in (3, 5, 13, 25) else [3, 5, 13, 25])
+    print()
+    section("[4] 최적화 전/후 비교 (2차원 -> 1차원 배열)")
+    print_compare_table([3, 5, 13, 25] if n in (3, 5, 13, 25) else [3, 5, 13, 25, n])
+
+
 # ---------------------------------------------------------------- 실행
 def main() -> None:
     print("=== Mini NPU Simulator ===\n")
     print("[모드 선택]\n")
     print("1. 사용자 입력 (3x3)")
     print("2. data.json 분석")
+    print("3. 보너스: 패턴 생성기 + 1차원 최적화 비교")
     while True:
         try:
             choice = input("선택: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n입력이 중단되어 종료합니다.")
             return
-        if choice in ("1", "2"):
+        if choice in ("1", "2", "3"):
             break
-        print("1 또는 2를 입력하세요.")
+        print("1, 2, 3 중 하나를 입력하세요.")
     print()
     if choice == "1":
         mode_user_input()
-    else:
+    elif choice == "2":
         mode_json()
+    else:
+        mode_bonus()
 
 
 if __name__ == "__main__":
