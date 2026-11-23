@@ -97,6 +97,99 @@ def section(title: str) -> None:
     print("#" + "-" * 39)
 
 
+# ---------------------------------------------------------------- 성능 분석
+def make_cross(n: int) -> Grid:
+    g = Grid(n)
+    for i in range(n):
+        for j in range(n):
+            if i == n // 2 or j == n // 2:
+                g.set(i, j, 1)
+    return g
+
+
+def measure_ms(n: int, repeat: int = REPEAT) -> float:
+    """n x n MAC 연산을 repeat번 측정해 평균 시간(ms)을 돌려준다. (입출력 시간은 제외)"""
+    pattern = make_cross(n)
+    filt = make_cross(n)
+    times = []
+    for _ in range(repeat):
+        start = time.perf_counter()
+        mac(pattern, filt)
+        times.append((time.perf_counter() - start) * 1000)
+    return sum(times) / len(times)
+
+
+def print_perf_table(sizes) -> None:
+    print("크기        평균 시간(ms)    연산 횟수(N²)    회당(µs)")
+    print("-" * 56)
+    for n in sizes:
+        avg = measure_ms(n)
+        ops = n * n
+        label = "%dx%d" % (n, n)
+        print("%-10s  %-14.3f  %-14d  %.3f" % (label, avg, ops, avg * 1000 / ops))
+
+
+# ---------------------------------------------------------------- 모드 1: 사용자 입력 (3x3)
+def read_grid(title: str, n: int = 3) -> Optional[Grid]:
+    """n줄을 한 줄씩(공백 구분) 입력받는다. 형식이 틀리면 안내 후 그 줄을 다시 입력받는다."""
+    print("%s (%d줄 입력, 공백 구분)" % (title, n))
+    rows = []
+    while len(rows) < n:
+        try:
+            line = input().strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n입력이 중단되었습니다.")
+            return None
+        parts = line.split()
+        if len(parts) != n:                     # 열 개수 불일치 (빈 줄 포함)
+            print(MSG_FORMAT.format(n=n))
+            continue
+        try:
+            rows.append([float(p) for p in parts])
+        except ValueError:                      # 숫자 파싱 실패
+            print(MSG_FORMAT.format(n=n))
+            continue
+    return Grid.from_rows(rows)
+
+
+def mode_user_input() -> None:
+    section("[1] 필터 입력")
+    filter_a = read_grid("필터 A")
+    if filter_a is None:
+        return
+    print()
+    filter_b = read_grid("필터 B")
+    if filter_b is None:
+        return
+    print("\n저장 확인: 필터 A, 필터 B (각 3x3)를 저장했습니다.")
+    print("[필터 A]\n" + filter_a.show() + "\n[필터 B]\n" + filter_b.show())
+
+    section("[2] 패턴 입력")
+    pattern = read_grid("패턴")
+    if pattern is None:
+        return
+
+    section("[3] MAC 결과")
+    score_a = mac(pattern, filter_a)
+    score_b = mac(pattern, filter_b)
+    times = []
+    for _ in range(REPEAT):
+        start = time.perf_counter()
+        mac(pattern, filter_a)
+        times.append((time.perf_counter() - start) * 1000)
+    print("A 점수: %r" % score_a)
+    print("B 점수: %r" % score_b)
+    print("연산 시간(평균/%d회): %.3f ms" % (REPEAT, sum(times) / len(times)))
+    verdict = judge_ab(score_a, score_b)
+    if verdict == "판정 불가":
+        print("판정: 판정 불가 (|A-B| < %g)" % EPSILON)
+    else:
+        print("판정: " + verdict)
+
+    section("[4] 성능 분석 (3x3)")
+    print_perf_table([3])
+
+
 # ---------------------------------------------------------------- 실행
 def main() -> None:
     print("=== Mini NPU Simulator ===\n")
@@ -114,7 +207,7 @@ def main() -> None:
         print("1 또는 2를 입력하세요.")
     print()
     if choice == "1":
-        print("아직 준비 중인 모드입니다.")
+        mode_user_input()
     else:
         print("아직 준비 중인 모드입니다.")
 
