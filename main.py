@@ -4,6 +4,7 @@
 """
 import json
 import os
+import platform
 import re
 import time
 from typing import Dict, List, Optional, Tuple
@@ -115,9 +116,13 @@ def make_cross(n: int) -> Grid:
 
 
 def measure_ms(n: int, repeat: int = REPEAT) -> float:
-    """n x n MAC 연산을 repeat번 측정해 평균 시간(ms)을 돌려준다. (입출력 시간은 제외)"""
+    """n x n MAC 연산을 repeat번 측정해 평균 시간(ms)을 돌려준다. (입출력 시간은 제외)
+
+    첫 호출은 캐시·바이트코드 준비 때문에 느릴 수 있어서, 측정 전에 한 번 돌려 버린다(워밍업).
+    """
     pattern = make_cross(n)
     filt = make_cross(n)
+    mac(pattern, filt)      # 워밍업 1회 (시간에 포함하지 않음)
     times = []
     for _ in range(repeat):
         start = time.perf_counter()
@@ -126,7 +131,14 @@ def measure_ms(n: int, repeat: int = REPEAT) -> float:
     return sum(times) / len(times)
 
 
+def env_line() -> str:
+    """측정 환경 한 줄: 같은 값이라도 컴퓨터가 다르면 시간이 달라지므로 함께 기록한다."""
+    return "측정 환경: Python %s, %s, 반복 %d회(워밍업 1회 제외)" % (
+        platform.python_version(), platform.system() + " " + platform.machine(), REPEAT)
+
+
 def print_perf_table(sizes) -> None:
+    print(env_line())
     print("크기        평균 시간(ms)    연산 횟수(N²)    회당(µs)")
     print("-" * 56)
     for n in sizes:
@@ -290,6 +302,28 @@ def count_failure_types(failures) -> Dict[str, int]:
     return counts
 
 
+# 실패 유형 -> 한 줄 요약에 쓰는 표준 키
+SUMMARY_KEYS = {
+    "라벨 오류": "fail_label",
+    "크기 불일치": "fail_size",
+    "동점(UNDECIDED)": "fail_tie",
+    "스키마 오류": "fail_schema",
+    "필터 오류": "fail_schema",
+    "판정 불일치": "fail_logic",
+}
+
+
+def summary_line(total: int, passed: int, failures, bad_filters) -> str:
+    """기계가 읽기 쉬운 한 줄 요약. 예: 요약: total=9 pass=6 fail=3 fail_label=1 ..."""
+    counts = {"fail_label": 0, "fail_size": 0, "fail_tie": 0, "fail_schema": 0, "fail_logic": 0}
+    for kind, count in count_failure_types(failures).items():
+        counts[SUMMARY_KEYS.get(kind, "fail_schema")] += count
+    parts = ["total=%d" % total, "pass=%d" % passed, "fail=%d" % (total - passed)]
+    parts += ["%s=%d" % (key, value) for key, value in counts.items()]
+    parts.append("failed_filters=%d" % len(bad_filters))
+    return "요약: " + " ".join(parts)
+
+
 def mode_json() -> None:
     try:
         with open(DATA_FILE, encoding="utf-8") as f:
@@ -324,6 +358,9 @@ def mode_json() -> None:
     print("통과: %d개" % passed)
     print("실패: %d개" % (total - passed))
     failures = [(name, reason) for name, status, reason in results if status == "FAIL"]
+    print(summary_line(total, passed, failures, bad_filters))
+    if bad_filters:
+        print("로드 실패 필터: " + ", ".join("size_%d" % n for n in sorted(bad_filters)))
     if failures:
         print("\n실패 유형별 개수:")
         for kind, count in count_failure_types(failures).items():
