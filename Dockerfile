@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.title="mini-npu" \
       org.opencontainers.image.source="https://github.com/80gina/mini-npu"
 
 WORKDIR /app
-COPY main.py data.json test_mini_npu.py ./
+COPY main.py data.json data_failure_demo.json test_mini_npu.py ./
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8

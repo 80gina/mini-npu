@@ -3,6 +3,7 @@
 실행: python test_mini_npu.py
 """
 import io
+import os
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
@@ -160,13 +161,37 @@ class Mode2Tests(unittest.TestCase):
             main.mode_json()
         return out.getvalue()
 
-    def test_summary_counts_and_failure_types(self):
+    def test_official_data_summary(self):
+        """과제 제공 data.json: 총 6, 통과 3, 실패 3 (실패는 모두 부동소수점 동점)."""
         out = self.run_mode2()
+        self.assertIn("총 테스트: 6개", out)
+        self.assertIn("통과: 3개", out)
+        self.assertIn("실패: 3개", out)
+        self.assertIn("- 동점(UNDECIDED): 3건", out)
+        self.assertIn("fail_tie=3", out)
+        for name in ("size_5_1", "size_13_2", "size_25_1"):
+            self.assertIn("- %s: 동점(UNDECIDED)" % name, out)
+
+    def test_official_data_passing_cases(self):
+        out = self.run_mode2()
+        self.assertIn("판정: Cross | expected: Cross | PASS", out)
+        self.assertIn("판정: X | expected: X | PASS", out)
+        self.assertEqual(out.count("| PASS"), 3)
+
+    def test_demo_data_covers_label_and_size_errors(self):
+        """실패 처리 시연용 data_failure_demo.json: 총 9, 통과 6, 라벨·크기·동점 각 1건."""
+        demo = os.path.join(os.path.dirname(os.path.abspath(main.__file__)), "data_failure_demo.json")
+        with mock.patch.object(main, "DATA_FILE", demo):
+            out = self.run_mode2()
         self.assertIn("총 테스트: 9개", out)
         self.assertIn("통과: 6개", out)
-        self.assertIn("실패: 3개", out)
         for line in ("- 라벨 오류: 1건", "- 동점(UNDECIDED): 1건", "- 크기 불일치: 1건"):
             self.assertIn(line, out)
+
+    def test_missing_data_file_does_not_crash(self):
+        with mock.patch.object(main, "DATA_FILE", "no_such_file.json"):
+            out = self.run_mode2()
+        self.assertIn("data.json을 읽을 수 없습니다", out)
 
     def test_failure_type_counter(self):
         counts = main.count_failure_types([("a", "라벨 오류: x"), ("b", "라벨 오류: y"), ("c", "동점(UNDECIDED): z")])

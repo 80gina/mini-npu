@@ -11,7 +11,9 @@ from typing import Dict, List, Optional, Tuple
 
 EPSILON = 1e-9      # 두 점수의 차이가 이보다 작으면 동점으로 본다
 REPEAT = 10         # 성능 측정 반복 횟수
-DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
+# 기본은 main.py 옆의 data.json(과제 제공 데이터). 환경 변수 MINI_NPU_DATA로 다른 파일을 지정할 수 있다.
+DATA_FILE = os.environ.get("MINI_NPU_DATA") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "data.json")
 MSG_FORMAT = "입력 형식 오류: 각 줄에 {n}개의 숫자를 공백으로 구분해 입력하세요."
 
 
